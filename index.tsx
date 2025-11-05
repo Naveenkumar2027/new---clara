@@ -1,7 +1,6 @@
-
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { createRoot } from 'react-dom/client';
-import { GoogleGenAI, LiveSession, LiveServerMessage, Modality, Blob } from '@google/genai';
+import { GoogleGenAI, LiveSession, LiveServerMessage, Modality, Blob, FunctionDeclaration, Type } from '@google/genai';
 
 // --- Helper functions for Audio Encoding/Decoding ---
 
@@ -51,38 +50,185 @@ function createBlob(data) {
 }
 
 
-// --- React Components ---
+// --- React Components & Icons ---
 
+const MicrophoneIcon = ({size=24}) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="22"></line></svg>
+);
 const RobotIcon = ({size = 24}) => (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
-        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8z" fillOpacity="0.3"></path>
-        <path d="M12 4c-4.42 0-8 3.58-8 8s3.58 8 8 8 8-3.58 8-8-3.58-8-8-8zm-2 13.5c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm4 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm-4-5.5c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm4 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5z M12 6c1.66 0 3 1.34 3 3H9c0-1.66 1.34-3 3-3z" fill="currentColor"></path>
-    </svg>
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M20 12h-2V9c0-1.1-.9-2-2-2h-1c-.55 0-1 .45-1 1s.45 1 1 1h1v2H8V9h1c.55 0 1-.45 1-1s-.45-1-1-1H8c-1.1 0-2 .9-2 2v3H4c-1.1 0-2 .9-2 2v2c0 1.1.9 2 2 2h1v1c0 .55.45 1 1 1s1-.45 1-1v-1h10v1c0 .55.45 1 1 1s1-.45 1-1v-1h1c1.1 0 2-.9 2-2v-2c0-1.1-.9-2-2-2zm-4.5 3h-7c-.28 0-.5-.22-.5-.5s.22-.5.5-.5h7c.28 0 .5.22.5.5s-.22.5-.5.5zM15 11H9V9h6v2z"></path></svg>
 );
-const UserIcon = () => (
-    <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"></path></svg>
+const UserIcon = ({size = 24}) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"></path></svg>
 );
-const VolumeIcon = () => (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"></path></svg>
+const GraduationCapIcon = ({size=16}) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor"><path d="M12 3L1 9l11 6 9-4.91V17h2V9L12 3zm0 8.47L4.5 8 12 5l7.5 3L12 11.47zM10.5 13.5v3.45c0 1.15.39 2.18 1.05 2.94.66.77 1.63 1.21 2.7 1.21 1.76 0 3.25-1.49 3.25-3.32V13.5h-1.5v3.28c0 .99-.6 1.82-1.75 1.82-.92 0-1.75-.83-1.75-1.82V13.5h-2.5z"></path></svg>
 );
-const PencilIcon = () => (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34a.9959.9959 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"></path></svg>
+const StaffLoginIcon = ({size=16}) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"></path></svg>
 );
-const CollegeIcon = () => (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M5 13.18v4L12 21l7-3.82v-4L12 17l-7-3.82zM12 3L1 9l11 6 9-4.91V17h2V9L12 3z"></path></svg>
+const VideoCallIcon = ({size=16}) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor"><path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z"></path></svg>
 );
-const StaffIcon = () => (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"></path></svg>
+const SpeakerIcon = ({size=20}) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"></path></svg>
 );
-const VideoIcon = () => (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z"></path></svg>
+const PencilIcon = ({size=20}) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34a.9959.9959 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"></path></svg>
 );
+
+
+const staffList = [
+    { name: 'Prof. Lakshmi Durga N', shortName: 'LDN' },
+    { name: 'Prof. Anitha C S', shortName: 'ACS' },
+    { name: 'Dr. G Dhivyasri', shortName: 'GD' },
+    { name: 'Prof. Nisha S K', shortName: 'NSK' },
+    { name: 'Prof. Amarnath B Patil', shortName: 'ABP' },
+    { name: 'Dr. Nagashree N', shortName: 'NN' },
+    { name: 'Prof. Anil Kumar K V', shortName: 'AKV' },
+    { name: 'Prof. Jyoti Kumari', shortName: 'JK' },
+    { name: 'Prof. Vidyashree R', shortName: 'VR' },
+    { name: 'Dr. Bhavana A', shortName: 'BA' },
+    { name: 'Prof. Bhavya T N', shortName: 'BTN' },
+];
+
+const initiateVideoCallFunction: FunctionDeclaration = {
+    name: 'initiateVideoCall',
+    description: 'Initiates a video call with a specific staff member.',
+    parameters: {
+        type: Type.OBJECT,
+        properties: {
+            staffShortName: {
+                type: Type.STRING,
+                description: 'The short name (e.g., "ACS", "LDN") of the staff member to call.',
+            },
+        },
+        required: ['staffShortName'],
+    },
+};
+
+const PreChatModal = ({ onStart }) => {
+    const [details, setDetails] = useState({
+        name: '',
+        phone: '+91',
+        purpose: '',
+        staffShortName: '',
+    });
+
+    const handleChange = (e) => {
+        const { name, value } = e.target;
+        setDetails(prev => ({ ...prev, [name]: value }));
+    };
+
+    const handleSubmit = (e) => {
+        e.preventDefault();
+        if (details.name.trim() && details.purpose.trim()) {
+            onStart(details);
+        } else {
+            alert('Please fill in your name and purpose.');
+        }
+    };
+
+    return (
+        <div className="modal-overlay">
+            <div className="modal-content">
+                <div className="modal-header">
+                    <RobotIcon size={28} />
+                    <h1>Start Conversation with Clara</h1>
+                </div>
+                <p>Please provide your details below to begin.</p>
+                <form onSubmit={handleSubmit}>
+                    <div className="form-field">
+                        <label htmlFor="name">Name</label>
+                        <input type="text" id="name" name="name" value={details.name} onChange={handleChange} required />
+                    </div>
+                    <div className="form-field">
+                        <label htmlFor="phone">Phone Number</label>
+                        <input type="tel" id="phone" name="phone" value={details.phone} onChange={handleChange} />
+                    </div>
+                    <div className="form-field">
+                         <label htmlFor="purpose">Purpose</label>
+                         <textarea id="purpose" name="purpose" value={details.purpose} onChange={handleChange} required />
+                    </div>
+                    <div className="form-field">
+                        <label htmlFor="staff">Connect with (Optional)</label>
+                        <select id="staff" name="staffShortName" value={details.staffShortName} onChange={handleChange}>
+                            <option value="">Select a staff member...</option>
+                            {staffList.map(staff => (
+                                <option key={staff.shortName} value={staff.shortName}>
+                                    {staff.name} ({staff.shortName})
+                                </option>
+                            ))}
+                        </select>
+                    </div>
+                    <button type="submit">Start Chatting</button>
+                </form>
+            </div>
+        </div>
+    );
+};
+
+const VideoCallView = ({ staff, onEndCall }) => {
+    const userVideoRef = useRef(null);
+    const streamRef = useRef(null);
+
+    useEffect(() => {
+        const startCamera = async () => {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+                streamRef.current = stream;
+                if (userVideoRef.current) {
+                    userVideoRef.current.srcObject = stream;
+                }
+            } catch (err) {
+                console.error("Error accessing camera:", err);
+                alert("Could not access your camera. Please check permissions and try again.");
+                onEndCall();
+            }
+        };
+
+        startCamera();
+
+        return () => {
+            if (streamRef.current) {
+                streamRef.current.getTracks().forEach(track => track.stop());
+            }
+        };
+    }, [onEndCall]);
+
+    return (
+        <div className="video-call-container">
+            <div className="staff-video-view">
+                <div className="staff-avatar-placeholder">
+                    <StaffLoginIcon size={80} />
+                </div>
+                <h2>{staff.name}</h2>
+                <p>Connecting...</p>
+                 <div className="video-call-branding">
+                    <RobotIcon size={20} /> Clara Video
+                </div>
+            </div>
+            <div className="user-video-view">
+                <video ref={userVideoRef} autoPlay playsInline muted></video>
+            </div>
+            <div className="video-controls">
+                <button className="end-call-button" onClick={onEndCall}>
+                    End Call
+                </button>
+            </div>
+        </div>
+    );
+};
 
 
 const App = () => {
     const [messages, setMessages] = useState([]);
     const [isRecording, setIsRecording] = useState(false);
-    const [status, setStatus] = useState('Ready to chat');
+    const [status, setStatus] = useState('Click the microphone to speak');
+    const [showPreChatModal, setShowPreChatModal] = useState(true);
+    const [preChatDetails, setPreChatDetails] = useState(null);
+    const [view, setView] = useState('chat'); // 'chat', 'video_call'
+    const [videoCallTarget, setVideoCallTarget] = useState(null);
     
     const sessionPromiseRef = useRef(null);
     const inputAudioContextRef = useRef(null);
@@ -93,419 +239,376 @@ const App = () => {
     const sourcesRef = useRef(new Set());
     const nextStartTimeRef = useRef(0);
     const chatContainerRef = useRef(null);
+    const silenceStartRef = useRef(null);
+    const isRecordingRef = useRef(false);
 
-    // Load chat history from sessionStorage
+    const currentInputTranscriptionRef = useRef('');
+    const currentOutputTranscriptionRef = useRef('');
+
     useEffect(() => {
         try {
+            const savedDetails = sessionStorage.getItem('clara-prechat-details');
+            if (savedDetails) {
+                setPreChatDetails(JSON.parse(savedDetails));
+                setShowPreChatModal(false);
+            }
             const savedMessages = sessionStorage.getItem('clara-chat-history');
             if (savedMessages) {
                 setMessages(JSON.parse(savedMessages));
             } else {
-                 setMessages([{ sender: 'clara', text: "Hi there! I'm Clara, your friendly AI receptionist! 😊 I'm so excited to help you today! Feel free to ask me anything - I'm here to assist you with whatever you need!", isFinal: true, timestamp: new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', second: '2-digit' }) }]);
+                 setMessages([{ sender: 'clara', text: "Hi there! I'm Clara, your friendly AI receptionist! I'm so excited to help you today! Feel free to ask me anything - I'm here to assist with whatever you need!", isFinal: true, timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }]);
             }
         } catch (error) {
-            console.error("Failed to load messages from session storage", error);
+            console.error("Failed to load from session storage", error);
         }
     }, []);
 
-    // Save chat history to sessionStorage
     useEffect(() => {
         try {
-            sessionStorage.setItem('clara-chat-history', JSON.stringify(messages));
+            if (preChatDetails) {
+                sessionStorage.setItem('clara-prechat-details', JSON.stringify(preChatDetails));
+            }
+            if (messages.length > 0) {
+              sessionStorage.setItem('clara-chat-history', JSON.stringify(messages));
+            }
         } catch (error) {
-            console.error("Failed to save messages to session storage", error);
+            console.error("Failed to save to session storage", error);
         }
-    }, [messages]);
+    }, [preChatDetails, messages]);
 
-    // Auto-scroll chat
     useEffect(() => {
         if (chatContainerRef.current) {
             chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
         }
     }, [messages]);
 
-    const stopRecording = useCallback(() => {
-        if (isRecording) {
-            console.log("Stopping recording...");
-            setIsRecording(false);
-            setStatus('Ready to chat');
+    const handleStartConversation = (details) => {
+        setPreChatDetails(details);
+        setShowPreChatModal(false);
+        const welcomeText = details.name ? `Hi ${details.name}! I'm Clara, your friendly AI receptionist! How can I assist you today?` : "Hi there! I'm Clara, your friendly AI receptionist! How can I assist you today?";
+        setMessages([{ sender: 'clara', text: welcomeText, isFinal: true, timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }]);
+    };
+    
+    const stopRecording = useCallback((closeSession = true) => {
+        if (!isRecordingRef.current) return; // Prevent multiple stops
+        
+        isRecordingRef.current = false;
+        setIsRecording(false);
+        setStatus('Click the microphone to speak');
 
-            if (streamRef.current) {
-                streamRef.current.getTracks().forEach(track => track.stop());
-                streamRef.current = null;
-            }
-            if (scriptProcessorRef.current) {
-                scriptProcessorRef.current.disconnect();
-                scriptProcessorRef.current = null;
-            }
-            if (mediaStreamSourceRef.current) {
-                mediaStreamSourceRef.current.disconnect();
-                mediaStreamSourceRef.current = null;
-            }
-            if (inputAudioContextRef.current && inputAudioContextRef.current.state !== 'closed') {
-                inputAudioContextRef.current.close();
-            }
-            if (outputAudioContextRef.current && outputAudioContextRef.current.state !== 'closed') {
-                outputAudioContextRef.current.close();
-            }
-
-            if (sessionPromiseRef.current) {
-                sessionPromiseRef.current.then(session => {
-                    console.log("Closing session.");
-                    session.close();
-                });
-                sessionPromiseRef.current = null;
-            }
+        if (streamRef.current) {
+            streamRef.current.getTracks().forEach(track => track.stop());
+            streamRef.current = null;
         }
-    }, [isRecording]);
+        if (scriptProcessorRef.current) {
+            scriptProcessorRef.current.disconnect();
+            scriptProcessorRef.current = null;
+        }
+        if (mediaStreamSourceRef.current) {
+            mediaStreamSourceRef.current.disconnect();
+            mediaStreamSourceRef.current = null;
+        }
+        if (inputAudioContextRef.current && inputAudioContextRef.current.state !== 'closed') {
+            inputAudioContextRef.current.close().catch(console.error);
+            inputAudioContextRef.current = null;
+        }
+        
+        silenceStartRef.current = null;
+        
+        if (closeSession && sessionPromiseRef.current) {
+            sessionPromiseRef.current.then(session => session.close()).catch(console.error);
+            sessionPromiseRef.current = null;
+        }
+    }, []);
 
+    const handleEndCall = () => {
+        const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        setMessages(prev => [...prev, { sender: 'clara', text: `Video call with ${videoCallTarget.name} ended.`, isFinal: true, timestamp }]);
+        setView('chat');
+        setVideoCallTarget(null);
+    };
 
     const handleMicClick = async () => {
-        if (isRecording) {
-            stopRecording();
+        if (isRecordingRef.current) {
+            stopRecording(false);
             return;
         }
         
+        isRecordingRef.current = true;
         setIsRecording(true);
-        setStatus('Connecting...');
+        setStatus('Listening...');
 
         try {
-            const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-            
-            inputAudioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
-            outputAudioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
+            if (!sessionPromiseRef.current) {
+                const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+                
+                if (!outputAudioContextRef.current || outputAudioContextRef.current.state === 'closed') {
+                    outputAudioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
+                }
+                const outputNode = outputAudioContextRef.current.createGain();
+                outputNode.connect(outputAudioContextRef.current.destination);
 
-            sessionPromiseRef.current = ai.live.connect({
-                model: 'gemini-2.5-flash-native-audio-preview-09-2025',
-                config: {
-                    responseModalities: [Modality.AUDIO],
-                    inputAudioTranscription: {},
-                    outputAudioTranscription: {},
-                    speechConfig: {
-                        voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Zephyr' } },
-                    },
-                    systemInstruction: "You are Clara, a friendly and helpful AI receptionist. You can converse in multiple languages, including Indian languages mixed with English. Keep your responses conversational and concise.",
-                },
-                callbacks: {
-                    onopen: async () => {
-                        console.log('Session opened.');
-                        setStatus('Listening...');
-                        streamRef.current = await navigator.mediaDevices.getUserMedia({ audio: true });
-                        mediaStreamSourceRef.current = inputAudioContextRef.current.createMediaStreamSource(streamRef.current);
-                        scriptProcessorRef.current = inputAudioContextRef.current.createScriptProcessor(4096, 1, 1);
-                        
-                        scriptProcessorRef.current.onaudioprocess = (audioProcessingEvent) => {
-                            const inputData = audioProcessingEvent.inputBuffer.getChannelData(0);
-                            const pcmBlob = createBlob(inputData);
-                            if (sessionPromiseRef.current) {
-                                sessionPromiseRef.current.then((session) => {
-                                    session.sendRealtimeInput({ media: pcmBlob });
-                                });
+                const { name, purpose, staffShortName } = preChatDetails;
+                const selectedStaff = staffList.find(s => s.shortName === staffShortName);
+                const staffHint = selectedStaff ? `${selectedStaff.name} (${selectedStaff.shortName})` : 'Not specified';
+                
+                const systemInstruction = `**PRIMARY DIRECTIVE: You MUST detect the user's language and respond ONLY in that same language. This is a strict requirement.**
+
+You are CLARA, the official, friendly, and professional AI receptionist for Sai Vidya Institute of Technology (SVIT). Your goal is to assist users efficiently. Keep your spoken responses concise and to the point to ensure a fast, smooth conversation.
+
+**Caller Information (Context):**
+- Name: ${name}
+- Stated Purpose: ${purpose}
+- Staff to connect with: ${staffHint}
+
+**Your Capabilities & Rules:**
+1.  **Staff Knowledge:** You know the following staff members. Use this map to identify them if mentioned:
+    - LDN: Prof. Lakshmi Durga N
+    - ACS: Prof. Anitha C S
+    - GD: Dr. G Dhivyasri
+    - NSK: Prof. Nisha S K
+    - ABP: Prof. Amarnath B Patil
+    - NN: Dr. Nagashree N
+    - AKV: Prof. Anil Kumar K V
+    - JK: Prof. Jyoti Kumari
+    - VR: Prof. Vidyashree R
+    - BA: Dr. Bhavana A
+    - BTN: Prof. Bhavya T N
+2.  **College Information:** Answer questions about admissions, fees, placements, facilities, departments, and general college info.
+3.  **Actions:**
+    - If the user expresses a clear intent to start a video call or meet with a specific staff member (e.g., 'call Anitha', 'I want to see Prof. Lakshmi'), you MUST use the \`initiateVideoCall\` tool. Do not just confirm; use the tool directly.
+    - If asked about schedules or availability, offer to check.
+4.  **General Queries:** For topics outside of SVIT, act as a helpful general AI assistant.
+5.  **Tone:** Always be polite, professional, and helpful.`;
+                
+                sessionPromiseRef.current = ai.live.connect({
+                    model: 'gemini-2.5-flash-native-audio-preview-09-2025',
+                    callbacks: {
+                        onopen: () => {
+                          setStatus('Listening...');
+                        },
+                        onmessage: async (message) => {
+                             if (message.toolCall) {
+                                for (const fc of message.toolCall.functionCalls) {
+                                    if (fc.name === 'initiateVideoCall') {
+                                        const { staffShortName } = fc.args;
+                                        const staffToCall = staffList.find(s => s.shortName === staffShortName);
+                                        
+                                        if (staffToCall) {
+                                            const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                                            setMessages(prev => [...prev, { sender: 'clara', text: `Initiating video call with ${staffToCall.name}...`, isFinal: true, timestamp }]);
+                                            stopRecording(true);
+                                            setVideoCallTarget(staffToCall);
+                                            setView('video_call');
+
+                                            sessionPromiseRef.current.then((session) => {
+                                                session.sendToolResponse({
+                                                    functionResponses: { id : fc.id, name: fc.name, response: { result: "Video call initiated successfully." } }
+                                                })
+                                            });
+                                        } else {
+                                             const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                                             setMessages(prev => [...prev, { sender: 'clara', text: `Sorry, I couldn't find a staff member with the ID "${staffShortName}".`, isFinal: true, timestamp }]);
+                                        }
+                                    }
+                                }
+                                return;
                             }
-                        };
-                        
-                        mediaStreamSourceRef.current.connect(scriptProcessorRef.current);
-                        scriptProcessorRef.current.connect(inputAudioContextRef.current.destination);
-                    },
-                    onmessage: async (message) => {
-                        const timestamp = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', second: '2-digit' });
-                        // Handle transcription
-                        const inputTranscription = message.serverContent?.inputTranscription;
-                        const outputTranscription = message.serverContent?.outputTranscription;
+                            if (message.serverContent?.inputTranscription) {
+                                currentInputTranscriptionRef.current += message.serverContent.inputTranscription.text;
+                            }
+                            if (message.serverContent?.outputTranscription) {
+                                currentOutputTranscriptionRef.current += message.serverContent.outputTranscription.text;
+                            }
+                            if (message.serverContent?.turnComplete) {
+                                const fullInput = currentInputTranscriptionRef.current.trim();
+                                const fullOutput = currentOutputTranscriptionRef.current.trim();
+                                
+                                const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
-                        if (inputTranscription) {
-                            setMessages(prev => {
-                                const last = prev[prev.length - 1];
-                                if (last?.sender === 'user' && !last.isFinal) {
-                                    return [...prev.slice(0, -1), { ...last, text: inputTranscription.text }];
+                                if (fullInput) {
+                                    setMessages(prev => [...prev, { sender: 'user', text: fullInput, isFinal: true, timestamp }]);
                                 }
-                                return [...prev, { sender: 'user', text: inputTranscription.text, isFinal: false, timestamp }];
-                            });
-                        }
-
-                        if (outputTranscription) {
-                             setMessages(prev => {
-                                const last = prev[prev.length - 1];
-                                if (last?.sender === 'clara' && !last.isFinal) {
-                                    return [...prev.slice(0, -1), { ...last, text: outputTranscription.text }];
+                                if (fullOutput) {
+                                    setMessages(prev => [...prev, { sender: 'clara', text: fullOutput, isFinal: true, timestamp }]);
                                 }
-                                return [...prev, { sender: 'clara', text: outputTranscription.text, isFinal: false, timestamp }];
-                            });
-                        }
-
-                        if (message.serverContent?.turnComplete) {
-                            setMessages(prev => prev.map(msg => ({...msg, isFinal: true })));
-                        }
-
-                        // Handle audio playback
-                        const base64Audio = message.serverContent?.modelTurn?.parts[0]?.inlineData.data;
-                        if (base64Audio) {
-                            nextStartTimeRef.current = Math.max(nextStartTimeRef.current, outputAudioContextRef.current.currentTime);
-                            const audioBuffer = await decodeAudioData(decode(base64Audio), outputAudioContextRef.current, 24000, 1);
-                            const source = outputAudioContextRef.current.createBufferSource();
-                            source.buffer = audioBuffer;
-                            source.connect(outputAudioContextRef.current.destination);
+                                
+                                currentInputTranscriptionRef.current = '';
+                                currentOutputTranscriptionRef.current = '';
+                                stopRecording(false);
+                            }
                             
-                            source.addEventListener('ended', () => {
-                                sourcesRef.current.delete(source);
-                            });
+                            const base64EncodedAudioString = message.serverContent?.modelTurn?.parts[0]?.inlineData.data;
+                            if (base64EncodedAudioString) {
+                                setStatus('Responding...');
+                                const decodedAudio = decode(base64EncodedAudioString);
+                                const audioBuffer = await decodeAudioData(decodedAudio, outputAudioContextRef.current, 24000, 1);
 
-                            source.start(nextStartTimeRef.current);
-                            nextStartTimeRef.current += audioBuffer.duration;
-                            sourcesRef.current.add(source);
+                                nextStartTimeRef.current = Math.max(nextStartTimeRef.current, outputAudioContextRef.current.currentTime);
+                                const source = outputAudioContextRef.current.createBufferSource();
+                                source.buffer = audioBuffer;
+                                source.connect(outputNode);
+                                source.start(nextStartTimeRef.current);
+                                nextStartTimeRef.current += audioBuffer.duration;
+                                sourcesRef.current.add(source);
+                                source.onended = () => {
+                                    sourcesRef.current.delete(source);
+                                };
+                            }
+                        },
+                        onerror: (e) => {
+                            console.error('Session error:', e);
+                            setStatus(`Error: ${e.message}`);
+                            stopRecording(true);
+                        },
+                        onclose: () => {
+                            setStatus('Session ended. Click mic to start again.');
+                            sessionPromiseRef.current = null;
+                        },
+                    },
+                    config: {
+                        responseModalities: [Modality.AUDIO],
+                        speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Zephyr' } } },
+                        systemInstruction: systemInstruction,
+                        inputAudioTranscription: {},
+                        outputAudioTranscription: {},
+                        tools: [{ functionDeclarations: [initiateVideoCallFunction] }],
+                    },
+                });
+            }
+            
+            if (!inputAudioContextRef.current || inputAudioContextRef.current.state === 'closed') {
+                inputAudioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
+            }
+
+            streamRef.current = await navigator.mediaDevices.getUserMedia({ audio: true });
+            mediaStreamSourceRef.current = inputAudioContextRef.current.createMediaStreamSource(streamRef.current);
+            scriptProcessorRef.current = inputAudioContextRef.current.createScriptProcessor(4096, 1, 1);
+            
+            const calculateRMS = (data) => {
+                let sum = 0;
+                for (let i = 0; i < data.length; i++) {
+                    sum += data[i] * data[i];
+                }
+                return Math.sqrt(sum / data.length);
+            };
+            
+            silenceStartRef.current = null;
+            
+            scriptProcessorRef.current.onaudioprocess = (audioProcessingEvent) => {
+                const inputData = audioProcessingEvent.inputBuffer.getChannelData(0);
+                
+                const pcmBlob = createBlob(inputData);
+                if (sessionPromiseRef.current) {
+                    sessionPromiseRef.current.then((session) => {
+                        session.sendRealtimeInput({ media: pcmBlob });
+                    }).catch(err => console.error("Error sending audio:", err));
+                }
+
+                // Automatic stop on silence
+                const volume = calculateRMS(inputData);
+                const SILENCE_THRESHOLD = 0.01;
+                const SPEECH_TIMEOUT = 2000; // 2 seconds
+
+                if (volume > SILENCE_THRESHOLD) {
+                    silenceStartRef.current = null;
+                } else {
+                    if (silenceStartRef.current === null) {
+                        silenceStartRef.current = Date.now();
+                    } else if (Date.now() - silenceStartRef.current > SPEECH_TIMEOUT) {
+                        if (isRecordingRef.current) {
+                            stopRecording(false);
                         }
+                    }
+                }
+            };
 
-                         const interrupted = message.serverContent?.interrupted;
-                         if (interrupted) {
-                             for (const source of sourcesRef.current.values()) {
-                                 source.stop();
-                                 sourcesRef.current.delete(source);
-                             }
-                             nextStartTimeRef.current = 0;
-                         }
+            mediaStreamSourceRef.current.connect(scriptProcessorRef.current);
+            scriptProcessorRef.current.connect(inputAudioContextRef.current.destination);
 
-                    },
-                    onerror: (e) => {
-                        console.error('Session error:', e);
-                        setStatus('Error. Please try again.');
-                        stopRecording();
-                    },
-                    onclose: () => {
-                        console.log('Session closed.');
-                         if(isRecording) { // only if not closed by user action
-                             stopRecording();
-                         }
-                    },
-                },
-            });
         } catch (error) {
-            console.error('Failed to start recording:', error);
-            setStatus('Mic setup failed. Please allow permissions.');
+            console.error('Error starting recording:', error);
+            setStatus(`Error: ${error.message}`);
+            isRecordingRef.current = false;
             setIsRecording(false);
         }
     };
     
-    return (
-        <>
-            <style>{`
-                :root {
-                    --page-bg: #6A5ACD; /* A nice purple */
-                    --app-bg: #F3F4F6; /* Light gray */
-                    --header-bg: #FFFFFF;
-                    --input-bg: #FFFFFF;
-
-                    --clara-bubble-bg: #5D5FEF;
-                    --clara-bubble-text: #FFFFFF;
-                    --user-bubble-bg: #FFFFFF;
-                    --user-bubble-text: #1F2937;
-                    
-                    --text-primary: #111827;
-                    --text-secondary: #6B7280;
-                    --clara-header-text: #5D5FEF;
-                    
-                    --status-green: #10B981;
-                    --mic-idle: #F59E0B; /* Amber/Orange */
-                    --mic-recording: #EF4444; /* Red */
-                }
-                body {
-                    font-family: 'Noto Sans', sans-serif;
-                    margin: 0;
-                    background-color: var(--page-bg);
-                    display: flex;
-                    justify-content: center;
-                    align-items: center;
-                    height: 100vh;
-                    color: var(--text-primary);
-                }
-                .app-wrapper {
-                    width: 100%;
-                    height: 100%;
-                    max-width: 1200px;
-                    max-height: 800px;
-                    display: flex;
-                    flex-direction: column;
-                    border-radius: 20px;
-                    overflow: hidden;
-                    box-shadow: 0 20px 40px rgba(0,0,0,0.2);
-                    background-color: var(--app-bg);
-                }
-                .app-header {
-                    background-color: var(--header-bg);
-                    padding: 1rem 2rem;
-                    display: flex;
-                    justify-content: space-between;
-                    align-items: center;
-                    border-bottom: 1px solid #E5E7EB;
-                    flex-shrink: 0;
-                }
-                .header-left, .header-right {
-                    display: flex;
-                    align-items: center;
-                    gap: 1.5rem;
-                }
-                .header-left {
-                    color: var(--clara-header-text);
-                    font-weight: 700;
-                    font-size: 1.5rem;
-                    gap: 0.75rem;
-                }
-                .header-button {
-                    background-color: #F3F4F6;
-                    border: none;
-                    border-radius: 999px;
-                    padding: 0.5rem 1rem;
-                    font-size: 0.875rem;
-                    font-weight: 500;
-                    display: flex;
-                    align-items: center;
-                    gap: 0.5rem;
-                    cursor: pointer;
-                    transition: background-color 0.2s;
-                }
-                .header-button:hover { background-color: #E5E7EB; }
-                .header-button.green { color: #059669; }
-                .header-button.blue { color: #2563EB; }
-                .header-button.red { color: #DC2626; }
-
-                .status-indicator { display: flex; align-items: center; gap: 0.5rem; color: var(--status-green); font-weight: 500; font-size: 0.875rem; }
-                .status-indicator .dot { width: 8px; height: 8px; background-color: var(--status-green); border-radius: 50%; }
-
-                .chat-area {
-                    flex: 1;
-                    display: flex;
-                    flex-direction: column;
-                    overflow: hidden;
-                }
-                .chat-window {
-                    flex: 1;
-                    padding: 1.5rem 2rem;
-                    overflow-y: auto;
-                }
-                .message-wrapper { display: flex; flex-direction: column; margin-bottom: 1rem; }
-                .message-wrapper.clara { align-items: flex-start; }
-                .message-wrapper.user { align-items: flex-end; }
-                .message { display: flex; max-width: 75%; align-items: flex-end; gap: 0.75rem;}
-                .message.user { flex-direction: row-reverse; }
-
-                .message-icon { color: var(--text-secondary); flex-shrink: 0; }
-                .message-content {
-                    padding: 0.75rem 1.25rem;
-                    border-radius: 18px;
-                    line-height: 1.5;
-                    font-size: 0.95rem;
-                }
-                .message.clara .message-content {
-                    background-color: var(--clara-bubble-bg);
-                    color: var(--clara-bubble-text);
-                    border-bottom-left-radius: 4px;
-                }
-                .message.user .message-content {
-                    background-color: var(--user-bubble-bg);
-                    color: var(--user-bubble-text);
-                    border-bottom-right-radius: 4px;
-                    box-shadow: 0 1px 2px rgba(0,0,0,0.05);
-                }
-                .message-timestamp {
-                    font-size: 0.75rem;
-                    color: var(--text-secondary);
-                    margin-top: 0.5rem;
-                    padding: 0 0.5rem;
-                }
-                .message-wrapper.user .message-timestamp { text-align: right; }
-                
-                .typing-indicator span {
-                    display: inline-block; width: 8px; height: 8px; border-radius: 50%;
-                    background-color: var(--clara-bubble-text); opacity: 0.7;
-                    animation: typing 1.2s infinite;
-                }
-                .typing-indicator span:nth-child(2) { animation-delay: 0.2s; }
-                .typing-indicator span:nth-child(3) { animation-delay: 0.4s; }
-                @keyframes typing {
-                    0%, 100% { transform: translateY(0); } 50% { transform: translateY(-5px); }
-                }
-
-                .input-area {
-                    padding: 1rem 2rem;
-                    background-color: var(--input-bg);
-                    border-top: 1px solid #E5E7EB;
-                }
-                .input-content {
-                    display: flex;
-                    align-items: center;
-                    gap: 1.5rem;
-                }
-                .mic-button {
-                    width: 64px; height: 64px;
-                    border-radius: 50%; border: none; cursor: pointer;
-                    display: flex; justify-content: center; align-items: center;
-                    transition: all 0.2s ease;
-                    flex-shrink: 0;
-                }
-                .mic-button.idle { background-color: var(--mic-idle); color: white; }
-                .mic-button.recording { background-color: var(--mic-recording); color: white; box-shadow: 0 0 0 6px var(--mic-recording-glow, rgba(239, 68, 68, 0.4)); }
-                .mic-button svg { width: 30px; height: 30px; }
-                
-                .input-text-area p { color: var(--text-primary); font-weight: 500; margin: 0 0 0.5rem; }
-                .input-footer { display: flex; align-items: center; gap: 1.5rem; color: #9E9E9E; font-size: 0.8rem; }
-                .input-footer div { display: flex; align-items: center; gap: 0.3rem; }
-                .input-footer div:first-child svg { color: var(--clara-header-text); }
-                .input-footer div:last-child svg { color: var(--mic-idle); }
-            `}</style>
-            <div className="app-wrapper">
-                <header className="app-header">
-                    <div className="header-left">
-                        <RobotIcon size={32} />
-                        <h1>Clara</h1>
+    const renderContent = () => {
+        if (showPreChatModal) {
+            return <PreChatModal onStart={handleStartConversation} />;
+        }
+        if (view === 'video_call' && videoCallTarget) {
+            return <VideoCallView staff={videoCallTarget} onEndCall={handleEndCall} />;
+        }
+        return (
+            <div className="app-container">
+                <div className="header">
+                     <div className="header-left">
+                        <RobotIcon size={28} />
+                        <span>Clara</span>
                     </div>
                     <div className="header-right">
-                        <button className="header-button green"><CollegeIcon /> College Demo</button>
-                        <button className="header-button blue"><StaffIcon /> Staff Login</button>
-                        <button className="header-button red"><VideoIcon /> Video Call</button>
-                        <div className="status-indicator">
-                            <span className="dot"></span>
+                        <div className="header-button college-demo">
+                            <GraduationCapIcon />
+                            <span>College Demo</span>
+                        </div>
+                        <div className="header-button staff-login">
+                            <StaffLoginIcon />
+                            <span>Staff Login</span>
+                        </div>
+                        <div className="header-button video-call">
+                            <VideoCallIcon />
+                            <span>Video Call</span>
+                        </div>
+                         <div className="status-indicator">
+                            <div className="status-dot"></div>
                             <span>Ready to chat</span>
                         </div>
                     </div>
-                </header>
-                <main className="chat-area">
-                    <div className="chat-window" ref={chatContainerRef}>
-                        {messages.map((msg, index) => (
-                            <div key={index} className={`message-wrapper ${msg.sender}`}>
-                                <div className={`message ${msg.sender}`}>
-                                    {msg.sender === 'clara' && <div className="message-icon"><RobotIcon /></div>}
-                                    <div className="message-content">
-                                        {msg.text || (msg.sender === 'clara' && (
-                                            <div className="typing-indicator"><span></span><span></span><span></span></div>
-                                        ))}
-                                    </div>
-                                    {msg.sender === 'user' && <div className="message-icon"><UserIcon /></div>}
-                                </div>
-                                {msg.isFinal && msg.timestamp && <div className="message-timestamp">{msg.timestamp}</div>}
+                </div>
+
+                <div className="chat-container" ref={chatContainerRef}>
+                    {messages.map((msg, index) => (
+                        <div key={index} className={`message-wrapper ${msg.sender}`}>
+                            <div className="message-avatar">
+                                {msg.sender === 'user' ? <UserIcon size={20} /> : <RobotIcon size={20} />}
                             </div>
-                        ))}
+                            <div className="message-content">
+                                <p>{msg.text}</p>
+                            </div>
+                             <div className="timestamp">{msg.timestamp}</div>
+                        </div>
+                    ))}
+                </div>
+
+                <div className="footer">
+                     <button 
+                        className={`mic-button ${isRecording ? 'recording' : ''}`} 
+                        onClick={handleMicClick}
+                        aria-label={isRecording ? 'Stop recording' : 'Start recording'}
+                    >
+                        <MicrophoneIcon size={28} />
+                    </button>
+                    <div className="footer-status-text">
+                        {status}
                     </div>
-                    <div className="input-area">
-                        <div className="input-content">
-                             <button 
-                                className={`mic-button ${isRecording ? 'recording' : 'idle'}`}
-                                onClick={handleMicClick}
-                                aria-label={isRecording ? "Stop recording" : "Start recording"}
-                            >
-                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M12 14c1.66 0 2.99-1.34 2.99-3L15 5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.3-3c0 3-2.54 5.1-5.3 5.1S6.7 14 6.7 11H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c3.28-.48 6-3.3 6-6.72h-1.7z"></path></svg>
-                            </button>
-                            <div className="input-text-area">
-                                <p>{isRecording ? status : 'Click the microphone to speak'}</p>
-                                <div className="input-footer">
-                                    <div><VolumeIcon /><p>Clara voice enabled</p></div>
-                                    <div><PencilIcon /><p>Text cleaning enabled</p></div>
-                                </div>
-                            </div>
+                    <div className="footer-options">
+                        <div className="option-item">
+                            <SpeakerIcon />
+                            <span>Clara voice enabled</span>
+                        </div>
+                        <div className="option-item">
+                            <PencilIcon />
+                            <span>Text cleaning enabled</span>
                         </div>
                     </div>
-                </main>
+                </div>
             </div>
-        </>
-    );
+        );
+    };
+
+    return <>{renderContent()}</>;
 };
 
 const root = createRoot(document.getElementById('root'));
