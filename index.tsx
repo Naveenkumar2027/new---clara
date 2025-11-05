@@ -52,8 +52,17 @@ function createBlob(data) {
 
 // --- React Components & Icons ---
 
-const MicrophoneIcon = ({size=24}) => (
+const MicOnIcon = ({size=24}) => (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="22"></line></svg>
+);
+const MicOffIcon = ({size=24}) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="1" y1="1" x2="23" y2="23"></line><path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6"></path><path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23"></path><line x1="12" y1="19" x2="12" y2="22"></line></svg>
+);
+const CameraOnIcon = ({size=24}) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor"><path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z"></path></svg>
+);
+const CameraOffIcon = ({size=24}) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor"><path d="M21 6.5l-4 4V7h-6.18l2 2H16v.92l4 4V6.5zm-1.12 9.38L18.8 15.3l-4-4V7H8.8l-2-2H16c.55 0 1 .45 1 1v3.5l4 4zm-16-1.59l1.41-1.41 1.47 1.47-1.41 1.41-1.47-1.47zM4.41 6.41L3 4.99 4.41 3.58 3 2.17l1.41-1.41 18 18-1.41 1.41-2.92-2.92H4c-.55 0-1-.45-1-1V7c0-.55.45-1 1-1h.41l-1.59-1.59z"></path></svg>
 );
 const RobotIcon = ({size = 24}) => (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M20 12h-2V9c0-1.1-.9-2-2-2h-1c-.55 0-1 .45-1 1s.45 1 1 1h1v2H8V9h1c.55 0 1-.45 1-1s-.45-1-1-1H8c-1.1 0-2 .9-2 2v3H4c-1.1 0-2 .9-2 2v2c0 1.1.9 2 2 2h1v1c0 .55.45 1 1 1s1-.45 1-1v-1h10v1c0 .55.45 1 1 1s1-.45 1-1v-1h1c1.1 0 2-.9 2-2v-2c0-1.1-.9-2-2-2zm-4.5 3h-7c-.28 0-.5-.22-.5-.5s.22-.5.5-.5h7c.28 0 .5.22.5.5s-.22.5-.5.5zM15 11H9V9h6v2z"></path></svg>
@@ -67,7 +76,7 @@ const GraduationCapIcon = ({size=16}) => (
 const StaffLoginIcon = ({size=16}) => (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"></path></svg>
 );
-const VideoCallIcon = ({size=16}) => (
+const VideoCallHeaderIcon = ({size=16}) => (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor"><path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z"></path></svg>
 );
 const SpeakerIcon = ({size=20}) => (
@@ -171,47 +180,145 @@ const PreChatModal = ({ onStart }) => {
 const VideoCallView = ({ staff, onEndCall }) => {
     const userVideoRef = useRef(null);
     const streamRef = useRef(null);
+    const animationFrameRef = useRef(null);
+    const audioContextRef = useRef(null);
+
+    const [countdown, setCountdown] = useState(3);
+    const [isConnected, setIsConnected] = useState(false);
+    const [isUserSpeaking, setIsUserSpeaking] = useState(false);
+    const [isStaffSpeaking, setIsStaffSpeaking] = useState(false);
+    const [isMicOn, setIsMicOn] = useState(true);
+    const [isCameraOn, setIsCameraOn] = useState(true);
+
+    // Countdown effect
+    useEffect(() => {
+        if (countdown > 0) {
+            const timer = setTimeout(() => setCountdown(countdown - 1), 1000);
+            return () => clearTimeout(timer);
+        } else if (countdown === 0) {
+            setIsConnected(true);
+        }
+    }, [countdown]);
+    
+    // Simulated staff speaking effect
+    useEffect(() => {
+        if (!isConnected) return;
+        const interval = setInterval(() => {
+            setIsStaffSpeaking(prev => Math.random() > 0.5 ? !prev : prev);
+        }, 1200);
+        return () => clearInterval(interval);
+    }, [isConnected]);
 
     useEffect(() => {
-        const startCamera = async () => {
+        const startCameraAndAudio = async () => {
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
                 streamRef.current = stream;
                 if (userVideoRef.current) {
                     userVideoRef.current.srcObject = stream;
                 }
+
+                // Setup audio analysis for speaker detection
+                const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+                audioContextRef.current = audioContext;
+                const source = audioContext.createMediaStreamSource(stream);
+                const analyser = audioContext.createAnalyser();
+                analyser.fftSize = 512;
+                source.connect(analyser);
+
+                const dataArray = new Uint8Array(analyser.frequencyBinCount);
+                const checkSpeaking = () => {
+                    analyser.getByteTimeDomainData(dataArray);
+                    let sum = 0;
+                    for (const amplitude of dataArray) {
+                        sum += Math.pow(amplitude / 128 - 1, 2);
+                    }
+                    const volume = Math.sqrt(sum / dataArray.length);
+                    const SPEAKING_THRESHOLD = 0.02;
+                    
+                    const audioTrack = streamRef.current?.getAudioTracks()[0];
+                    if (audioTrack?.enabled) {
+                        setIsUserSpeaking(volume > SPEAKING_THRESHOLD);
+                    } else {
+                        setIsUserSpeaking(false);
+                    }
+                    animationFrameRef.current = requestAnimationFrame(checkSpeaking);
+                };
+                checkSpeaking();
+
             } catch (err) {
-                console.error("Error accessing camera:", err);
-                alert("Could not access your camera. Please check permissions and try again.");
+                console.error("Error accessing camera/mic:", err);
+                alert("Could not access your camera or microphone. Please check permissions and try again.");
                 onEndCall();
             }
         };
 
-        startCamera();
+        startCameraAndAudio();
 
         return () => {
+            cancelAnimationFrame(animationFrameRef.current);
             if (streamRef.current) {
                 streamRef.current.getTracks().forEach(track => track.stop());
+            }
+            if (audioContextRef.current) {
+                audioContextRef.current.close().catch(console.error);
             }
         };
     }, [onEndCall]);
 
+    const toggleMic = () => {
+        if (streamRef.current) {
+            const audioTrack = streamRef.current.getAudioTracks()[0];
+            if (audioTrack) {
+                audioTrack.enabled = !audioTrack.enabled;
+                setIsMicOn(audioTrack.enabled);
+            }
+        }
+    };
+    
+    const toggleCamera = () => {
+        if (streamRef.current) {
+            const videoTrack = streamRef.current.getVideoTracks()[0];
+            if (videoTrack) {
+                videoTrack.enabled = !videoTrack.enabled;
+                setIsCameraOn(videoTrack.enabled);
+            }
+        }
+    };
+
     return (
         <div className="video-call-container">
+             {countdown > 0 && (
+                <div className="countdown-overlay">
+                    <div className="countdown-number">{countdown}</div>
+                </div>
+            )}
             <div className="staff-video-view">
-                <div className="staff-avatar-placeholder">
+                <div className={`staff-avatar-placeholder ${isStaffSpeaking && isConnected ? 'speaking' : ''}`}>
                     <StaffLoginIcon size={80} />
                 </div>
                 <h2>{staff.name}</h2>
-                <p>Connecting...</p>
+                <p>{isConnected ? 'Connected' : 'Connecting...'}</p>
                  <div className="video-call-branding">
                     <RobotIcon size={20} /> Clara Video
                 </div>
             </div>
-            <div className="user-video-view">
-                <video ref={userVideoRef} autoPlay playsInline muted></video>
+            <div className={`user-video-view ${isUserSpeaking ? 'speaking' : ''}`}>
+                 {isCameraOn ? (
+                    <video ref={userVideoRef} autoPlay playsInline muted></video>
+                ) : (
+                    <div className="user-video-placeholder">
+                        <UserIcon size={48} />
+                    </div>
+                )}
             </div>
             <div className="video-controls">
+                <button className={`control-button ${!isMicOn ? 'off' : ''}`} onClick={toggleMic} aria-label={isMicOn ? 'Mute microphone' : 'Unmute microphone'}>
+                    {isMicOn ? <MicOnIcon size={24}/> : <MicOffIcon size={24}/>}
+                </button>
+                <button className={`control-button ${!isCameraOn ? 'off' : ''}`} onClick={toggleCamera} aria-label={isCameraOn ? 'Turn off camera' : 'Turn on camera'}>
+                     {isCameraOn ? <CameraOnIcon size={24}/> : <CameraOffIcon size={24}/>}
+                </button>
                 <button className="end-call-button" onClick={onEndCall}>
                     End Call
                 </button>
@@ -294,7 +401,6 @@ const App = () => {
         
         isRecordingRef.current = false;
         setIsRecording(false);
-        setStatus('Click the microphone to speak');
 
         if (streamRef.current) {
             streamRef.current.getTracks().forEach(track => track.stop());
@@ -331,6 +437,7 @@ const App = () => {
     const handleMicClick = async () => {
         if (isRecordingRef.current) {
             stopRecording(false);
+            setStatus('Processing...');
             return;
         }
         
@@ -395,17 +502,20 @@ You are CLARA, the official, friendly, and professional AI receptionist for Sai 
                                         const staffToCall = staffList.find(s => s.shortName === staffShortName);
                                         
                                         if (staffToCall) {
-                                            const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-                                            setMessages(prev => [...prev, { sender: 'clara', text: `Initiating video call with ${staffToCall.name}...`, isFinal: true, timestamp }]);
-                                            stopRecording(true);
-                                            setVideoCallTarget(staffToCall);
-                                            setView('video_call');
-
+                                            // Send the tool response *before* closing the session.
                                             sessionPromiseRef.current.then((session) => {
                                                 session.sendToolResponse({
                                                     functionResponses: { id : fc.id, name: fc.name, response: { result: "Video call initiated successfully." } }
                                                 })
                                             });
+
+                                            const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                                            setMessages(prev => [...prev, { sender: 'clara', text: `Initiating video call with ${staffToCall.name}...`, isFinal: true, timestamp }]);
+                                            setVideoCallTarget(staffToCall);
+                                            setView('video_call');
+
+                                            // Now that the response is sent and UI is updating, close the session.
+                                            stopRecording(true);
                                         } else {
                                              const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
                                              setMessages(prev => [...prev, { sender: 'clara', text: `Sorry, I couldn't find a staff member with the ID "${staffShortName}".`, isFinal: true, timestamp }]);
@@ -435,10 +545,19 @@ You are CLARA, the official, friendly, and professional AI receptionist for Sai 
                                 
                                 currentInputTranscriptionRef.current = '';
                                 currentOutputTranscriptionRef.current = '';
-                                stopRecording(false);
+                                
+                                const checkPlaybackAndReset = () => {
+                                    const isPlaying = nextStartTimeRef.current > outputAudioContextRef.current.currentTime;
+                                    if (sourcesRef.current.size === 0 && !isPlaying) {
+                                        setStatus('Click the microphone to speak');
+                                    } else {
+                                        setTimeout(checkPlaybackAndReset, 100);
+                                    }
+                                };
+                                setTimeout(checkPlaybackAndReset, 50);
                             }
                             
-                            const base64EncodedAudioString = message.serverContent?.modelTurn?.parts[0]?.inlineData.data;
+                            const base64EncodedAudioString = message.serverContent?.modelTurn?.parts[0]?.inlineData?.data;
                             if (base64EncodedAudioString) {
                                 setStatus('Responding...');
                                 const decodedAudio = decode(base64EncodedAudioString);
@@ -508,7 +627,7 @@ You are CLARA, the official, friendly, and professional AI receptionist for Sai 
                 // Automatic stop on silence
                 const volume = calculateRMS(inputData);
                 const SILENCE_THRESHOLD = 0.01;
-                const SPEECH_TIMEOUT = 2000; // 2 seconds
+                const SPEECH_TIMEOUT = 1200; // 1.2 seconds
 
                 if (volume > SILENCE_THRESHOLD) {
                     silenceStartRef.current = null;
@@ -518,6 +637,7 @@ You are CLARA, the official, friendly, and professional AI receptionist for Sai 
                     } else if (Date.now() - silenceStartRef.current > SPEECH_TIMEOUT) {
                         if (isRecordingRef.current) {
                             stopRecording(false);
+                            setStatus('Processing...');
                         }
                     }
                 }
@@ -558,7 +678,7 @@ You are CLARA, the official, friendly, and professional AI receptionist for Sai 
                             <span>Staff Login</span>
                         </div>
                         <div className="header-button video-call">
-                            <VideoCallIcon />
+                            <VideoCallHeaderIcon />
                             <span>Video Call</span>
                         </div>
                          <div className="status-indicator">
@@ -588,7 +708,7 @@ You are CLARA, the official, friendly, and professional AI receptionist for Sai 
                         onClick={handleMicClick}
                         aria-label={isRecording ? 'Stop recording' : 'Start recording'}
                     >
-                        <MicrophoneIcon size={28} />
+                        <MicOnIcon size={28} />
                     </button>
                     <div className="footer-status-text">
                         {status}
