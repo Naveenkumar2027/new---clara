@@ -224,3 +224,489 @@ const VideoCallView = ({ staff, onEndCall }) => {
     }, [isConnected]);
 
     useEffect(() => {
+        if (!isConnected) return;
+
+        let audioContext, analyser, dataArray, sourceNode;
+
+        const setup = async () => {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+                streamRef.current = stream;
+
+                if (userVideoRef.current) {
+                    userVideoRef.current.srcObject = stream;
+                }
+                
+                stream.getAudioTracks().forEach(track => track.enabled = isMicOn);
+                stream.getVideoTracks().forEach(track => track.enabled = isCameraOn);
+
+                // FIX: Cast window to `any` to access `webkitAudioContext` for broader browser compatibility without TypeScript errors.
+                audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+                audioContextRef.current = audioContext;
+                analyser = audioContext.createAnalyser();
+                analyser.fftSize = 256;
+                sourceNode = audioContext.createMediaStreamSource(stream);
+                sourceNode.connect(analyser);
+                dataArray = new Uint8Array(analyser.frequencyBinCount);
+
+                const draw = () => {
+                    animationFrameRef.current = requestAnimationFrame(draw);
+                    analyser.getByteFrequencyData(dataArray);
+                    const average = dataArray.reduce((a, b) => a + b, 0) / dataArray.length;
+                    setIsUserSpeaking(average > 35); // Threshold for speaking
+                };
+                draw();
+
+            } catch (error) {
+                console.error("Error accessing media devices.", error);
+            }
+        };
+
+        setup();
+
+        return () => {
+            if (animationFrameRef.current) {
+                cancelAnimationFrame(animationFrameRef.current);
+            }
+            if (streamRef.current) {
+                streamRef.current.getTracks().forEach(track => track.stop());
+            }
+            if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
+                audioContextRef.current.close();
+            }
+        };
+    }, [isConnected, isCameraOn, isMicOn]);
+
+    const toggleMic = () => {
+        const nextState = !isMicOn;
+        if (streamRef.current) {
+            streamRef.current.getAudioTracks().forEach(track => {
+                track.enabled = nextState;
+            });
+            setIsMicOn(nextState);
+        }
+    };
+
+    const toggleCamera = () => {
+        const nextState = !isCameraOn;
+        if (streamRef.current) {
+            streamRef.current.getVideoTracks().forEach(track => {
+                track.enabled = nextState;
+            });
+            setIsCameraOn(nextState);
+        }
+    };
+
+
+    return (
+        <div className="video-call-container">
+            {countdown > 0 && (
+                <div className="countdown-overlay">
+                    <div className="countdown-number">{countdown}</div>
+                </div>
+            )}
+            <div className="video-call-branding">
+                <VideoCallHeaderIcon size={16} /> Clara Video Call
+            </div>
+            <div className="staff-video-view">
+                <div className={`staff-avatar-placeholder ${isStaffSpeaking ? 'speaking' : ''}`}>
+                    <StaffLoginIcon size={60} />
+                </div>
+                <h2>{staff?.name || 'Staff Member'}</h2>
+                <p style={{ opacity: isConnected ? 1 : 0 }}>
+                    {isConnected ? 'Connected' : 'Connecting...'}
+                </p>
+            </div>
+            <div className={`user-video-view ${isUserSpeaking && isMicOn ? 'speaking' : ''}`}>
+                {isCameraOn ? (
+                    <video ref={userVideoRef} autoPlay playsInline muted />
+                ) : (
+                    <div className="user-video-placeholder"><UserIcon size={40} /></div>
+                )}
+            </div>
+            <div className="video-controls">
+                <button onClick={toggleMic} className={`control-button ${!isMicOn ? 'off' : ''}`} aria-label={isMicOn ? "Mute microphone" : "Unmute microphone"}>
+                    {isMicOn ? <MicOnIcon /> : <MicOffIcon />}
+                </button>
+                <button onClick={toggleCamera} className={`control-button ${!isCameraOn ? 'off' : ''}`} aria-label={isCameraOn ? "Turn off camera" : "Turn on camera"}>
+                    {isCameraOn ? <CameraOnIcon /> : <CameraOffIcon />}
+                </button>
+                <button onClick={onEndCall} className="end-call-button">
+                    End Call
+                </button>
+            </div>
+        </div>
+    );
+};
+
+const App = () => {
+    const [hasApiKey, setHasApiKey] = useState(false);
+    const [apiKeyError, setApiKeyError] = useState(null);
+    const [chatStarted, setChatStarted] = useState(false);
+    const [userDetails, setUserDetails] = useState(null);
+    const [inVideoCall, setInVideoCall] = useState(false);
+    const [videoCallStaff, setVideoCallStaff] = useState(null);
+    
+    const [messages, setMessages] = useState([]);
+    const [isRecording, setIsRecording] = useState(false);
+    const [statusText, setStatusText] = useState("Tap the mic to speak");
+    const [pendingCall, setPendingCall] = useState(null);
+    const [isSpeakerOn, setIsSpeakerOn] = useState(true);
+
+    const sessionPromiseRef = useRef(null);
+    const inputAudioContextRef = useRef(null);
+    const outputAudioContextRef = useRef(null);
+    const scriptProcessorRef = useRef(null);
+    const microphoneStreamRef = useRef(null);
+    const nextStartTimeRef = useRef(0);
+    const sourcesRef = useRef(new Set());
+    const chatContainerRef = useRef(null);
+    const currentInputTranscriptionRef = useRef('');
+    const currentOutputTranscriptionRef = useRef('');
+    const aiRef = useRef(null);
+    const silenceTimerRef = useRef(null);
+    const outputGainNodeRef = useRef(null);
+
+    useEffect(() => {
+        checkApiKey();
+    }, []);
+
+    useEffect(() => {
+        if (chatContainerRef.current) {
+            chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
+        }
+    }, [messages]);
+
+    useEffect(() => {
+        if (outputGainNodeRef.current) {
+            outputGainNodeRef.current.gain.value = isSpeakerOn ? 1 : 0;
+        }
+    }, [isSpeakerOn]);
+
+    const checkApiKey = async () => {
+        const selected = await window.aistudio.hasSelectedApiKey();
+        setHasApiKey(selected);
+    };
+
+    const handleSelectKey = async () => {
+        try {
+            await window.aistudio.openSelectKey();
+            setHasApiKey(true);
+            setApiKeyError(null);
+        } catch (e) {
+            console.error('API key selection failed', e);
+            setApiKeyError('Failed to select API key. Please try again.');
+        }
+    };
+    
+    const addMessage = (sender, text, hasConfirmation = false, confirmationData = null) => {
+        setMessages(prev => [...prev, {
+            id: Date.now(),
+            sender,
+            text,
+            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            hasConfirmation,
+            confirmationData,
+        }]);
+    };
+
+    const handleStartChat = (details) => {
+        setUserDetails(details);
+        setChatStarted(true);
+        addMessage('clara', `Welcome, ${details.name}! I'm Clara, your AI assistant for the PES University CSE Department. How can I help you today?`);
+    };
+
+    const stopConversation = useCallback(async () => {
+        if (silenceTimerRef.current) {
+            clearTimeout(silenceTimerRef.current);
+            silenceTimerRef.current = null;
+        }
+        setStatusText("Processing...");
+    
+        // Stop and clear any ongoing audio playback
+        if (sourcesRef.current) {
+            sourcesRef.current.forEach(source => {
+                try { source.stop(); } catch (e) { console.warn("Audio source already stopped."); }
+            });
+            sourcesRef.current.clear();
+        }
+        nextStartTimeRef.current = 0;
+    
+        // Close the Gemini session
+        if (sessionPromiseRef.current) {
+            try {
+                const session = await sessionPromiseRef.current;
+                session.close();
+            } catch(e) {
+                console.error("Error closing session", e);
+            }
+            sessionPromiseRef.current = null;
+        }
+        
+        // Stop microphone stream
+        if (microphoneStreamRef.current) {
+            microphoneStreamRef.current.getTracks().forEach(track => track.stop());
+            microphoneStreamRef.current = null;
+        }
+        
+        // Disconnect audio processor
+        if (scriptProcessorRef.current) {
+            try {
+                scriptProcessorRef.current.disconnect();
+            } catch(e) {
+                console.warn("Error disconnecting script processor", e);
+            }
+            scriptProcessorRef.current = null;
+        }
+    
+        // Close Web Audio API contexts to release system resources
+        if (inputAudioContextRef.current && inputAudioContextRef.current.state !== 'closed') {
+            await inputAudioContextRef.current.close();
+        }
+        if (outputAudioContextRef.current && outputAudioContextRef.current.state !== 'closed') {
+            await outputAudioContextRef.current.close();
+        }
+        inputAudioContextRef.current = null;
+        outputAudioContextRef.current = null;
+    
+        setIsRecording(false);
+        setStatusText("Tap the mic to speak");
+    }, []);
+
+    const startConversation = useCallback(async () => {
+        if (!userDetails) return;
+        setIsRecording(true);
+        setStatusText("Listening...");
+
+        try {
+            aiRef.current = new GoogleGenAI({ apiKey: process.env.API_KEY });
+            
+            const systemInstruction = `You are Clara, a friendly and helpful AI receptionist for the Computer Science department at PES University. Your goal is to assist visitors, answer their questions, and connect them with staff members when necessary. The current user's name is ${userDetails.name}. Their stated purpose is "${userDetails.purpose}". If they want to connect with a specific staff member, their preference is ${userDetails.staffShortName || 'not specified'}. When a user explicitly asks to "call" a staff member, you MUST use the 'proposeVideoCall' function. Do not improvise or refuse. Use the function. IMPORTANT: You must respond in the same language as the user's last message. If they speak in Kannada, you respond in Kannada. If they speak in Telugu, you respond in Telugu. Do not switch to English unless the user does.`;
+
+            inputAudioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
+            outputAudioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
+            const gainNode = outputAudioContextRef.current.createGain();
+            gainNode.connect(outputAudioContextRef.current.destination);
+            outputGainNodeRef.current = gainNode;
+            outputGainNodeRef.current.gain.value = isSpeakerOn ? 1 : 0;
+
+
+            const sessionPromise = aiRef.current.live.connect({
+                model: 'gemini-2.5-flash-native-audio-preview-09-2025',
+                callbacks: {
+                    onopen: async () => {
+                        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                        microphoneStreamRef.current = stream;
+                        const source = inputAudioContextRef.current.createMediaStreamSource(stream);
+                        const scriptProcessor = inputAudioContextRef.current.createScriptProcessor(4096, 1, 1);
+                        scriptProcessorRef.current = scriptProcessor;
+
+                        scriptProcessor.onaudioprocess = (audioProcessingEvent) => {
+                            const inputData = audioProcessingEvent.inputBuffer.getChannelData(0);
+
+                            // VAD Logic
+                            const sumSquares = inputData.reduce((sum, val) => sum + val * val, 0);
+                            const rms = Math.sqrt(sumSquares / inputData.length);
+                            const VAD_THRESHOLD = 0.01;
+
+                            if (rms > VAD_THRESHOLD) {
+                                if (silenceTimerRef.current) {
+                                    clearTimeout(silenceTimerRef.current);
+                                    silenceTimerRef.current = null;
+                                }
+                            } else {
+                                if (!silenceTimerRef.current) {
+                                    silenceTimerRef.current = setTimeout(() => {
+                                        stopConversation();
+                                    }, 1200);
+                                }
+                            }
+
+                            const pcmBlob = createBlob(inputData);
+                            sessionPromiseRef.current?.then((session) => {
+                                session.sendRealtimeInput({ media: pcmBlob });
+                            });
+                        };
+                        source.connect(scriptProcessor);
+                        scriptProcessor.connect(inputAudioContextRef.current.destination);
+                    },
+                    onmessage: async (message) => {
+                        if (message.serverContent) {
+                            if (message.serverContent.inputTranscription) {
+                                currentInputTranscriptionRef.current += message.serverContent.inputTranscription.text;
+                            }
+                            if (message.serverContent.outputTranscription) {
+                                currentOutputTranscriptionRef.current += message.serverContent.outputTranscription.text;
+                            }
+                            if (message.serverContent.turnComplete) {
+                                const fullInput = currentInputTranscriptionRef.current.trim();
+                                const fullOutput = currentOutputTranscriptionRef.current.trim();
+                                if (fullInput) addMessage('user', fullInput);
+                                if (fullOutput) addMessage('clara', fullOutput);
+                                currentInputTranscriptionRef.current = '';
+                                currentOutputTranscriptionRef.current = '';
+                            }
+                            const base64Audio = message.serverContent?.modelTurn?.parts[0]?.inlineData?.data;
+                            if (base64Audio) {
+                                const outputAudioContext = outputAudioContextRef.current;
+                                if (!outputAudioContext || outputAudioContext.state === 'closed') return;
+                                const nextStartTime = Math.max(nextStartTimeRef.current, outputAudioContext.currentTime);
+                                const audioBuffer = await decodeAudioData(decode(base64Audio), outputAudioContext, 24000, 1);
+                                const source = outputAudioContext.createBufferSource();
+                                source.buffer = audioBuffer;
+                                source.connect(outputGainNodeRef.current);
+                                source.addEventListener('ended', () => sourcesRef.current.delete(source));
+                                source.start(nextStartTime);
+                                nextStartTimeRef.current = nextStartTime + audioBuffer.duration;
+                                sourcesRef.current.add(source);
+                            }
+                        }
+                        if (message.toolCall) {
+                            for (const fc of message.toolCall.functionCalls) {
+                                if (fc.name === 'proposeVideoCall') {
+                                    const staff = staffList.find(s => s.shortName === fc.args.staffShortName);
+                                    if (staff) {
+                                        setPendingCall(staff);
+                                        addMessage('clara', `I can connect you with ${staff.name}. Would you like to start a video call?`, true, staff);
+                                    } else {
+                                        addMessage('clara', `I'm sorry, I couldn't find a staff member with the ID "${fc.args.staffShortName}".`);
+                                    }
+                                    sessionPromiseRef.current?.then(session => {
+                                        session.sendToolResponse({ functionResponses: { id: fc.id, name: fc.name, response: { result: "ok" } } });
+                                    });
+                                }
+                            }
+                        }
+                    },
+                    onerror: (e) => {
+                        console.error('Session error', e);
+                        addMessage('system', 'Sorry, a connection error occurred.');
+                        stopConversation();
+                    },
+                    onclose: () => {
+                        console.log('Session closed');
+                    },
+                },
+                config: {
+                    responseModalities: [Modality.AUDIO],
+                    inputAudioTranscription: {},
+                    outputAudioTranscription: {},
+                    tools: [{ functionDeclarations: [proposeVideoCallFunction] }],
+                    systemInstruction,
+                },
+            });
+            sessionPromiseRef.current = sessionPromise;
+
+        } catch (e) {
+            console.error("Error starting conversation:", e);
+            if (e.message.includes("Requested entity was not found")) {
+                setHasApiKey(false);
+                setApiKeyError("The selected API key is invalid or not enabled for the Gemini API. Please select another key.");
+            } else {
+                addMessage('system', 'Could not start the microphone.');
+            }
+            setIsRecording(false);
+            setStatusText("Tap the mic to speak");
+        }
+    }, [userDetails, stopConversation, isSpeakerOn]);
+    
+    const toggleRecording = () => {
+        if (isRecording) {
+            stopConversation();
+        } else {
+            startConversation();
+        }
+    };
+    
+    const handleCallConfirmation = (confirm, staff) => {
+        setMessages(prev => prev.filter(m => !m.hasConfirmation));
+        setPendingCall(null);
+        if (confirm) {
+            addMessage('user', 'Yes, connect me.');
+            setVideoCallStaff(staff);
+            setInVideoCall(true);
+            stopConversation();
+        } else {
+            addMessage('user', 'No, not right now.');
+            addMessage('clara', 'Alright. Is there anything else I can help you with?');
+        }
+    };
+    
+    const handleEndCall = () => {
+        setInVideoCall(false);
+        setVideoCallStaff(null);
+        addMessage('system', 'Video call ended.');
+        addMessage('clara', `I hope that was helpful, ${userDetails.name}. Is there anything else you need?`);
+    };
+
+    if (!hasApiKey) {
+        return <ApiKeySelectionModal onSelect={handleSelectKey} error={apiKeyError} />;
+    }
+
+    if (!chatStarted) {
+        return <PreChatModal onStart={handleStartChat} />;
+    }
+
+    if (inVideoCall) {
+        return <VideoCallView staff={videoCallStaff} onEndCall={handleEndCall} />;
+    }
+
+    return (
+        <div className="app-container">
+            <header className="header">
+                <div className="header-left">
+                    <RobotIcon size={28} />
+                    <span>Clara</span>
+                </div>
+                <div className="header-right">
+                    <div className="header-button college-demo">
+                        <GraduationCapIcon /> PES University
+                    </div>
+                </div>
+            </header>
+            <main className="chat-container" ref={chatContainerRef}>
+                {messages.map((msg) => (
+                    <div key={msg.id} className={`message-wrapper ${msg.sender}`}>
+                        <div className="message-avatar">
+                            {msg.sender === 'clara' ? <RobotIcon size={20} /> : <UserIcon size={20} />}
+                        </div>
+                        <div className="message-content-wrapper">
+                            <div className="message-content">
+                                <p>{msg.text}</p>
+                            </div>
+                            <span className="timestamp">{msg.timestamp}</span>
+                             {msg.hasConfirmation && (
+                                <div className="confirmation-buttons">
+                                    <button onClick={() => handleCallConfirmation(true, msg.confirmationData)}>Yes, Start Call</button>
+                                    <button onClick={() => handleCallConfirmation(false, msg.confirmationData)}>No, Cancel</button>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                ))}
+            </main>
+            <footer className="footer">
+                <button 
+                    className={`mic-button ${isRecording ? 'recording' : ''}`} 
+                    onClick={toggleRecording}
+                    aria-label={isRecording ? 'Stop recording' : 'Start recording'}
+                >
+                    {isRecording ? <MicOnIcon /> : <MicOffIcon />}
+                </button>
+                <div className="footer-status-text">{statusText}</div>
+                <div className="footer-options">
+                    <button
+                        className={`option-item ${!isSpeakerOn ? 'disabled' : ''}`}
+                        onClick={() => setIsSpeakerOn(prev => !prev)}
+                        aria-label={isSpeakerOn ? "Mute speaker" : "Unmute speaker"}
+                    >
+                        <SpeakerIcon size={16}/> Speaker
+                    </button>
+                </div>
+            </footer>
+        </div>
+    );
+};
+
+const root = createRoot(document.getElementById('root'));
+root.render(<App />);
