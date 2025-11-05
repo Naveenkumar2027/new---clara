@@ -27,7 +27,7 @@
             padding: 0;
         }
         body {
-            font-family: var(--font-family);
+            font-family: 'Poppins', sans-serif;
             background-color: var(--background-color);
             display: flex;
             justify-content: center;
@@ -84,6 +84,13 @@
             margin-bottom: 24px;
             text-align: center;
         }
+        .modal-content a {
+            color: var(--header-bg-color);
+            text-decoration: none;
+        }
+        .modal-content a:hover {
+            text-decoration: underline;
+        }
         .modal-content form {
             display: flex;
             flex-direction: column;
@@ -106,7 +113,7 @@
             border: 1px solid #ddd;
             border-radius: 8px;
             font-size: 14px;
-            font-family: var(--font-family);
+            font-family: 'Poppins', sans-serif;
             transition: border-color 0.2s, box-shadow 0.2s;
         }
         .form-field input:focus,
@@ -120,7 +127,7 @@
             resize: vertical;
             min-height: 70px;
         }
-        .modal-content button[type="submit"] {
+        .modal-content button {
             background-color: var(--header-bg-color);
             color: white;
             border: none;
@@ -131,8 +138,9 @@
             cursor: pointer;
             transition: background-color 0.2s;
             margin-top: 8px;
+            width: 100%;
         }
-        .modal-content button[type="submit"]:hover {
+        .modal-content button:hover {
             background-color: #5550b3;
         }
         @keyframes fadeIn {
@@ -207,22 +215,25 @@
             padding: 20px;
             display: flex;
             flex-direction: column;
-            gap: 4px; /* Reduced gap between message and timestamp */
+            gap: 16px; 
         }
         .message-wrapper {
             display: flex;
-            flex-direction: column;
-            max-width: 80%;
-        }
-        .message-content {
-            display: flex;
-            align-items: flex-end;
             gap: 10px;
+            max-width: 85%;
         }
-        .message-wrapper.user { align-self: flex-end; }
-        .message-wrapper.clara { align-self: flex-start; }
-        
-        .message-wrapper.user .message-content { flex-direction: row-reverse; }
+        .message-wrapper.user { 
+            align-self: flex-end; 
+            flex-direction: row-reverse;
+        }
+        .message-wrapper.clara { 
+            align-self: flex-start; 
+        }
+         .message-wrapper.system {
+            align-self: center;
+            max-width: 100%;
+            justify-content: center;
+        }
 
         .message-avatar {
             width: 32px;
@@ -234,12 +245,24 @@
             flex-shrink: 0;
             background-color: #f0f0f0;
             color: #888;
+            align-self: flex-end;
         }
         .message-wrapper.clara .message-avatar {
             background-color: #e8e7ff;
             color: var(--clara-bubble-color);
         }
 
+        .message-content-wrapper {
+            display: flex;
+            flex-direction: column;
+        }
+         .message-wrapper.user .message-content-wrapper {
+            align-items: flex-end;
+        }
+         .message-wrapper.clara .message-content-wrapper {
+            align-items: flex-start;
+        }
+        
         .message-content p {
             padding: 10px 16px;
             border-radius: 18px;
@@ -257,14 +280,52 @@
             border: 1px solid var(--user-bubble-border);
             border-bottom-right-radius: 4px;
         }
+        .message-wrapper.system .message-content p {
+            background-color: transparent;
+            color: var(--text-secondary);
+            font-style: italic;
+            font-size: 12px;
+            padding: 2px 0;
+            border: none;
+        }
         
         .timestamp {
             font-size: 11px;
             color: var(--text-secondary);
-            padding: 4px 10px;
+            padding: 4px 10px 0;
         }
-        .message-wrapper.user .timestamp { align-self: flex-end; }
-        .message-wrapper.clara .timestamp { align-self: flex-start; margin-left: 42px; }
+        
+        .confirmation-buttons {
+            display: flex;
+            gap: 8px;
+            margin-top: 8px;
+        }
+        .confirmation-buttons button {
+            background-color: #f0f0f8;
+            border: 1px solid #dcdcec;
+            color: #555;
+            padding: 6px 14px;
+            border-radius: 16px;
+            cursor: pointer;
+            font-weight: 500;
+            font-size: 13px;
+            font-family: 'Poppins', sans-serif;
+            transition: all 0.2s;
+        }
+        .confirmation-buttons button:hover {
+            border-color: #b9b5f3;
+            background-color: #e8e7ff;
+        }
+        .confirmation-buttons button:first-child {
+           background-color: var(--speaking-indicator-color);
+           border-color: var(--speaking-indicator-color);
+           color: white;
+        }
+        .confirmation-buttons button:first-child:hover {
+           background-color: #45a049;
+           border-color: #45a049;
+        }
+
 
         .footer {
             padding: 16px 20px;
@@ -307,7 +368,6 @@
         .footer-options {
             display: flex;
             align-items: center;
-            gap: 12px;
             color: #999;
         }
         .option-item {
@@ -315,6 +375,26 @@
             align-items: center;
             gap: 6px;
             font-size: 12px;
+            font-family: 'Poppins', sans-serif;
+            background-color: transparent;
+            border: none;
+            color: #999;
+            cursor: pointer;
+            padding: 6px 8px;
+            border-radius: 16px;
+            transition: background-color 0.2s, color 0.2s;
+        }
+        .option-item:hover {
+            background-color: #e0e0e0;
+            color: #333;
+        }
+        .option-item.disabled {
+            color: #ccc;
+            text-decoration: line-through;
+        }
+        .option-item.disabled:hover {
+            background-color: transparent;
+            color: #ccc;
         }
 
         /* Video Call Styles */
